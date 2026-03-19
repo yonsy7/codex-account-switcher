@@ -21,9 +21,9 @@ class TestClaudeCLI:
         mock_which.return_value = "/usr/local/bin/claude"
         assert check_claude_cli() is True
 
-    @patch("claude_switcher.core.shutil.which")
-    def test_check_cli_not_found(self, mock_which):
-        mock_which.return_value = None
+    @patch("claude_switcher.core.Path.is_file", return_value=False)
+    @patch("claude_switcher.core.shutil.which", return_value=None)
+    def test_check_cli_not_found(self, mock_which, mock_is_file):
         assert check_claude_cli() is False
 
     @patch("claude_switcher.core.subprocess.run")

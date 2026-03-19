@@ -49,15 +49,39 @@ def _write_oauth_account(oauth_account: dict) -> None:
     CLAUDE_STATE_FILE.write_text(json.dumps(data))
 
 
+_EXTRA_PATHS = [
+    Path.home() / ".local" / "bin",
+    Path("/usr/local/bin"),
+    Path("/opt/homebrew/bin"),
+]
+
+
+def _find_claude() -> str | None:
+    """Find the claude binary, checking common install locations beyond PATH."""
+    found = shutil.which("claude")
+    if found:
+        return found
+    for d in _EXTRA_PATHS:
+        candidate = d / "claude"
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
 def check_claude_cli() -> bool:
-    """Check if the claude CLI is available on PATH."""
-    return shutil.which("claude") is not None
+    """Check if the claude CLI is available."""
+    return _find_claude() is not None
+
+
+def _claude_cmd() -> str:
+    """Return the path to the claude binary, or 'claude' as fallback."""
+    return _find_claude() or "claude"
 
 
 def get_auth_status() -> dict | None:
     """Run `claude auth status --json` and return parsed JSON, or None on failure."""
     result = subprocess.run(
-        ["claude", "auth", "status", "--json"],
+        [_claude_cmd(), "auth", "status", "--json"],
         capture_output=True,
         text=True,
     )
@@ -71,12 +95,12 @@ def get_auth_status() -> dict | None:
 
 def run_auth_logout() -> None:
     """Run `claude auth logout`."""
-    subprocess.run(["claude", "auth", "logout"], capture_output=True, text=True)
+    subprocess.run([_claude_cmd(), "auth", "logout"], capture_output=True, text=True)
 
 
 def run_auth_login() -> bool:
     """Run `claude auth login`. Returns True if successful (exit code 0)."""
-    result = subprocess.run(["claude", "auth", "login"])
+    result = subprocess.run([_claude_cmd(), "auth", "login"])
     return result.returncode == 0
 
 
