@@ -19,23 +19,25 @@ Credentials never leave your Keychain — no config files with tokens, no clipbo
 
 ## Install
 
+### Download the app (recommended)
+
+1. Go to [Releases](https://github.com/emilejouannet/claude-account-switcher/releases/latest)
+2. Download **Claude-Switcher.zip**
+3. Unzip and drag **Claude Switcher.app** to `/Applications`
+4. Launch it — the icon appears in your menu bar
+
+> **Note:** On first launch, macOS may block the app because it's not signed. Go to **System Settings → Privacy & Security** and click **Open Anyway**.
+
+### Install with pip
+
+If you prefer running from the terminal:
+
 ```bash
 pip install git+https://github.com/emilejouannet/claude-account-switcher.git
-```
-
-Or clone and install locally:
-
-```bash
-git clone https://github.com/emilejouannet/claude-account-switcher.git
-cd claude-account-switcher
-pip install .
+claude-switcher
 ```
 
 ## Usage
-
-```bash
-claude-switcher
-```
 
 A menu bar icon appears. From there you can:
 
@@ -49,18 +51,31 @@ On first launch, the app automatically imports your currently logged-in Claude C
 
 ## Requirements
 
-- macOS (uses the native Keychain and `rumps` for the menu bar)
-- Python 3.10+
+- macOS 12+
 - [Claude Code](https://claude.ai/code) installed and accessible via `claude` CLI
 
-## Development
+## Build from source
 
 ```bash
 git clone https://github.com/emilejouannet/claude-account-switcher.git
 cd claude-account-switcher
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
-pip install pytest
+pip install -e . && pip install py2app pytest
+```
+
+Run directly:
+```bash
+claude-switcher
+```
+
+Build the standalone `.app`:
+```bash
+bash build_app.sh
+# Output: dist/Claude Switcher.app
+```
+
+Run tests:
+```bash
 pytest tests/ -v
 ```
 

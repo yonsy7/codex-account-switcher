@@ -1,6 +1,7 @@
 """Account list persistence in ~/.config/claude-switcher/accounts.json."""
 
 import json
+import os
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
@@ -29,9 +30,10 @@ def load_accounts(path: Path = DEFAULT_CONFIG_PATH) -> list[AccountInfo]:
 
 def save_accounts(accounts: list[AccountInfo], path: Path = DEFAULT_CONFIG_PATH) -> None:
     """Save accounts to JSON file, creating parent dirs if needed."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     data = {"accounts": [asdict(acc) for acc in accounts]}
     path.write_text(json.dumps(data, indent=2))
+    os.chmod(path, 0o600)
 
 
 def add_account(account: AccountInfo, path: Path = DEFAULT_CONFIG_PATH) -> None:

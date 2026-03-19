@@ -50,7 +50,7 @@ class TestWriteCredentials:
             write_credentials("claude-switcher:test@test.com", "testuser", FAKE_CREDS)
             assert False, "Should have raised"
         except RuntimeError as e:
-            assert "permission denied" in str(e)
+            assert "Keychain write failed" in str(e)
 
 
 class TestDeleteCredentials:

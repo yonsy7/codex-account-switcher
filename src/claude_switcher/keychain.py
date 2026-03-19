@@ -32,7 +32,7 @@ def write_credentials(service: str, account: str, password: str) -> None:
         text=True,
     )
     if result.returncode != 0:
-        raise RuntimeError(f"Keychain write failed: {result.stderr}")
+        raise RuntimeError("Keychain write failed. Check macOS Keychain access permissions.")
 
 
 def delete_credentials(service: str) -> bool:

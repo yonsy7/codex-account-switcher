@@ -1,6 +1,7 @@
 """Business logic for account management."""
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -17,6 +18,15 @@ from claude_switcher.config import (
 )
 
 CLAUDE_SERVICE = keychain.CLAUDE_SERVICE
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _validate_email(email: str) -> str:
+    """Validate email before using it in Keychain service names."""
+    if not _EMAIL_RE.match(email) or len(email) > 254:
+        raise RuntimeError(f"Invalid email format: {email}")
+    return email
 
 
 def check_claude_cli() -> bool:
@@ -71,6 +81,7 @@ def import_current_account(config_path: Path = DEFAULT_CONFIG_PATH) -> AccountIn
         sub_type = "unknown"
         org_name = ""
 
+    _validate_email(email)
     keychain.write_credentials(f"claude-switcher:{email}", acct_attr, creds)
 
     account = AccountInfo(
@@ -95,6 +106,7 @@ def switch_account(target_email: str, config_path: Path = DEFAULT_CONFIG_PATH) -
                 f"claude-switcher:{active.email}", active.keychain_account, current_creds
             )
 
+    _validate_email(target_email)
     target_creds = keychain.read_credentials(f"claude-switcher:{target_email}")
     if not target_creds:
         raise RuntimeError(f"Credentials not found in Keychain for {target_email}")
