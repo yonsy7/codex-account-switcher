@@ -14,13 +14,54 @@ Claude Account Switcher saves your credentials securely in the macOS Keychain an
 - **Live usage display** — shows 5-hour and 7-day utilization for each account directly in the menu
 - **Secure credential storage** — credentials stored in macOS Keychain, never on disk
 - **Auto-import** — detects your current Claude Code account on first launch
+- **Full session switching** — swaps both OAuth tokens and Claude CLI state (`~/.claude.json`), so `claude auth status` always reflects the active account
 
 ## How it works
 
-1. Your Claude Code credentials live in the macOS Keychain under `Claude Code-credentials`
-2. The app saves a copy of each account's credentials in separate Keychain entries
-3. When you switch, it overwrites the official entry with the target account's credentials — all Claude Code sessions immediately use the new account
-4. Usage is fetched via Anthropic's OAuth API using each account's stored token
+Claude Code stores its authentication in two places:
+
+1. **macOS Keychain** — OAuth tokens (access + refresh) under the service `Claude Code-credentials`
+2. **`~/.claude.json`** — account metadata (email, org, subscription type) in the `oauthAccount` field
+
+When you add an account, the app:
+1. Backs up the current credentials to a separate Keychain entry (`claude-switcher:{email}`)
+2. Saves the `oauthAccount` metadata from `~/.claude.json` into its config
+3. Runs `claude auth logout` + `claude auth login` for the new account
+4. Imports the new account's credentials and metadata
+
+When you switch accounts, the app:
+1. Saves the current account's Keychain credentials and `oauthAccount` state
+2. Restores the target account's OAuth token into `Claude Code-credentials`
+3. Restores the target account's `oauthAccount` into `~/.claude.json`
+4. All Claude Code sessions immediately use the new account
+
+Usage data (5h/7d rate limits) is fetched via Anthropic's OAuth API using each account's stored token.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  macOS Keychain                                         │
+│                                                         │
+│  "Claude Code-credentials"     ← active account token   │
+│  "claude-switcher:user1@…"     ← backup token account 1 │
+│  "claude-switcher:user2@…"     ← backup token account 2 │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│  ~/.claude.json                                         │
+│                                                         │
+│  oauthAccount: { emailAddress, orgId, ... }             │
+│  ↑ swapped on each account switch                       │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│  ~/.config/claude-switcher/accounts.json  (mode 0600)   │
+│                                                         │
+│  Per account: email, subscription_type, org_name,       │
+│  keychain_account, oauth_account (cached metadata)      │
+└─────────────────────────────────────────────────────────┘
+```
 
 ## Install
 
@@ -51,6 +92,24 @@ A menu bar icon appears. From there:
 - **Remove an account** — removes saved credentials from the Keychain
 
 On first launch, the app automatically imports your currently logged-in Claude Code account.
+
+### Verifying a switch
+
+After switching, you can confirm in any terminal:
+
+```bash
+claude auth status
+# Should show the newly activated account's email
+```
+
+## Security
+
+- **Credentials are stored exclusively in the macOS Keychain** — never written to disk files
+- **Config file** (`~/.config/claude-switcher/accounts.json`) stores only account metadata (email, org name, subscription type, cached `oauthAccount` state) with `0600` permissions
+- **Config directory** has `0700` permissions
+- **Email validation** prevents Keychain service name injection
+- **No `shell=True`** in any subprocess call — no command injection possible
+- **OAuth tokens** pass through `security` CLI arguments (brief `ps` visibility, inherent to macOS `security` tool)
 
 ## Requirements
 

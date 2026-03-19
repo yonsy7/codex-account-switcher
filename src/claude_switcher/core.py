@@ -18,6 +18,7 @@ from claude_switcher.config import (
 )
 
 CLAUDE_SERVICE = keychain.CLAUDE_SERVICE
+CLAUDE_STATE_FILE = Path.home() / ".claude.json"
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -27,6 +28,25 @@ def _validate_email(email: str) -> str:
     if not _EMAIL_RE.match(email) or len(email) > 254:
         raise RuntimeError(f"Invalid email format: {email}")
     return email
+
+
+def _read_oauth_account() -> dict | None:
+    """Read the oauthAccount object from ~/.claude.json."""
+    try:
+        data = json.loads(CLAUDE_STATE_FILE.read_text())
+        return data.get("oauthAccount")
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+
+
+def _write_oauth_account(oauth_account: dict) -> None:
+    """Write the oauthAccount object into ~/.claude.json (merge, not overwrite)."""
+    try:
+        data = json.loads(CLAUDE_STATE_FILE.read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return
+    data["oauthAccount"] = oauth_account
+    CLAUDE_STATE_FILE.write_text(json.dumps(data))
 
 
 def check_claude_cli() -> bool:
@@ -84,14 +104,18 @@ def import_current_account(config_path: Path = DEFAULT_CONFIG_PATH) -> AccountIn
     _validate_email(email)
     keychain.write_credentials(f"claude-switcher:{email}", acct_attr, creds)
 
+    oauth_account = _read_oauth_account()
+
     account = AccountInfo(
         email=email,
         subscription_type=sub_type,
         org_name=org_name,
         active=True,
         keychain_account=acct_attr,
+        oauth_account=oauth_account,
     )
     add_account(account, config_path)
+    set_active_account(email, config_path)
     return account
 
 
@@ -105,6 +129,11 @@ def switch_account(target_email: str, config_path: Path = DEFAULT_CONFIG_PATH) -
             keychain.write_credentials(
                 f"claude-switcher:{active.email}", active.keychain_account, current_creds
             )
+        # Save current oauthAccount state from ~/.claude.json
+        current_oauth = _read_oauth_account()
+        if current_oauth:
+            active.oauth_account = current_oauth
+            add_account(active, config_path)
 
     _validate_email(target_email)
     target_creds = keychain.read_credentials(f"claude-switcher:{target_email}")
@@ -117,6 +146,11 @@ def switch_account(target_email: str, config_path: Path = DEFAULT_CONFIG_PATH) -
         raise RuntimeError(f"Account {target_email} not found in config")
 
     keychain.write_credentials(CLAUDE_SERVICE, target_account.keychain_account, target_creds)
+
+    # Restore target's oauthAccount into ~/.claude.json
+    if target_account.oauth_account:
+        _write_oauth_account(target_account.oauth_account)
+
     set_active_account(target_email, config_path)
 
 
@@ -131,6 +165,13 @@ def add_new_account(config_path: Path = DEFAULT_CONFIG_PATH) -> AccountInfo | No
             )
 
     run_auth_logout()
+
+    # Ensure all "Claude Code-credentials" entries are gone before login.
+    # claude auth logout may not clean up the Keychain properly, and leftover
+    # entries cause security find-generic-password -w to return the OLD token
+    # instead of the freshly-issued one after login.
+    while keychain.delete_credentials(CLAUDE_SERVICE):
+        pass
 
     if not run_auth_login():
         if active:

@@ -15,6 +15,7 @@ class AccountInfo:
     org_name: str
     active: bool
     keychain_account: str
+    oauth_account: dict | None = None
 
 
 def load_accounts(path: Path = DEFAULT_CONFIG_PATH) -> list[AccountInfo]:
@@ -23,7 +24,10 @@ def load_accounts(path: Path = DEFAULT_CONFIG_PATH) -> list[AccountInfo]:
         return []
     try:
         data = json.loads(path.read_text())
-        return [AccountInfo(**acc) for acc in data["accounts"]]
+        return [
+            AccountInfo(**{k: v for k, v in acc.items() if k in AccountInfo.__dataclass_fields__})
+            for acc in data["accounts"]
+        ]
     except (json.JSONDecodeError, KeyError, TypeError):
         return []
 

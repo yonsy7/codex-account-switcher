@@ -41,18 +41,21 @@ class TestClaudeCLI:
 
 
 class TestImportCurrentAccount:
+    @patch("claude_switcher.core._read_oauth_account")
     @patch("claude_switcher.core.get_auth_status")
     @patch("claude_switcher.core.keychain")
-    def test_import_success(self, mock_kc, mock_status, tmp_path):
+    def test_import_success(self, mock_kc, mock_status, mock_oauth, tmp_path):
         mock_status.return_value = {"email": "test@test.com", "subscriptionType": "pro", "orgName": "Org"}
         mock_kc.read_credentials.return_value = '{"accessToken":"tok"}'
         mock_kc.read_account_attribute.return_value = "testuser"
+        mock_oauth.return_value = {"emailAddress": "test@test.com"}
 
         config_path = tmp_path / "accounts.json"
         result = import_current_account(config_path)
 
         assert result is not None
         assert result.email == "test@test.com"
+        assert result.oauth_account == {"emailAddress": "test@test.com"}
         mock_kc.write_credentials.assert_called_once_with(
             "claude-switcher:test@test.com", "testuser", '{"accessToken":"tok"}'
         )
@@ -66,17 +69,21 @@ class TestImportCurrentAccount:
 
 
 class TestSwitchAccount:
+    @patch("claude_switcher.core._write_oauth_account")
+    @patch("claude_switcher.core._read_oauth_account")
     @patch("claude_switcher.core.keychain")
-    def test_switch_saves_current_then_loads_target(self, mock_kc, tmp_path):
+    def test_switch_saves_current_then_loads_target(self, mock_kc, mock_read_oauth, mock_write_oauth, tmp_path):
         config_path = tmp_path / "accounts.json"
         from claude_switcher.config import add_account, AccountInfo
         add_account(AccountInfo("a@test.com", "pro", "Org A", True, "usera"), config_path)
-        add_account(AccountInfo("b@test.com", "pro", "Org B", False, "userb"), config_path)
+        add_account(AccountInfo("b@test.com", "pro", "Org B", False, "userb",
+                                oauth_account={"emailAddress": "b@test.com"}), config_path)
 
         mock_kc.read_credentials.side_effect = [
             '{"accessToken":"refreshed-a"}',
             '{"accessToken":"tok-b"}',
         ]
+        mock_read_oauth.return_value = {"emailAddress": "a@test.com"}
 
         switch_account("b@test.com", config_path)
 
@@ -86,14 +93,18 @@ class TestSwitchAccount:
         mock_kc.write_credentials.assert_any_call(
             "Claude Code-credentials", "userb", '{"accessToken":"tok-b"}'
         )
+        mock_write_oauth.assert_called_once_with({"emailAddress": "b@test.com"})
 
+    @patch("claude_switcher.core._write_oauth_account")
+    @patch("claude_switcher.core._read_oauth_account")
     @patch("claude_switcher.core.keychain")
-    def test_switch_missing_keychain_entry_raises(self, mock_kc, tmp_path):
+    def test_switch_missing_keychain_entry_raises(self, mock_kc, mock_read_oauth, mock_write_oauth, tmp_path):
         config_path = tmp_path / "accounts.json"
         from claude_switcher.config import add_account, AccountInfo
         add_account(AccountInfo("a@test.com", "pro", "Org", True, "u"), config_path)
         add_account(AccountInfo("b@test.com", "pro", "Org", False, "u"), config_path)
         mock_kc.read_credentials.side_effect = ['{"tok":"a"}', None]
+        mock_read_oauth.return_value = None
 
         try:
             switch_account("b@test.com", config_path)
@@ -103,11 +114,12 @@ class TestSwitchAccount:
 
 
 class TestAddNewAccount:
+    @patch("claude_switcher.core._read_oauth_account")
     @patch("claude_switcher.core.get_auth_status")
     @patch("claude_switcher.core.run_auth_login")
     @patch("claude_switcher.core.run_auth_logout")
     @patch("claude_switcher.core.keychain")
-    def test_add_account_full_flow(self, mock_kc, mock_logout, mock_login, mock_status, tmp_path):
+    def test_add_account_full_flow(self, mock_kc, mock_logout, mock_login, mock_status, mock_oauth, tmp_path):
         config_path = tmp_path / "accounts.json"
         from claude_switcher.config import add_account, AccountInfo
         add_account(AccountInfo("a@test.com", "pro", "Org A", True, "usera"), config_path)
@@ -117,8 +129,10 @@ class TestAddNewAccount:
             '{"accessToken":"tok-new"}',
         ]
         mock_kc.read_account_attribute.side_effect = ["newuser"]
+        mock_kc.delete_credentials.return_value = False
         mock_login.return_value = True
         mock_status.return_value = {"email": "new@test.com", "subscriptionType": "pro", "orgName": "New Org"}
+        mock_oauth.return_value = {"emailAddress": "new@test.com"}
 
         result = add_new_account(config_path)
         assert result is not None
@@ -132,6 +146,7 @@ class TestAddNewAccount:
     def test_add_account_login_cancelled(self, mock_kc, mock_logout, mock_login, tmp_path):
         config_path = tmp_path / "accounts.json"
         mock_kc.read_credentials.return_value = None
+        mock_kc.delete_credentials.return_value = False
         mock_login.return_value = False
 
         result = add_new_account(config_path)
