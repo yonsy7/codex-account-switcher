@@ -139,7 +139,15 @@ def add_new_account(config_path: Path = DEFAULT_CONFIG_PATH) -> AccountInfo | No
                 keychain.write_credentials(CLAUDE_SERVICE, active.keychain_account, prev_creds)
         return None
 
-    return import_current_account(config_path)
+    try:
+        return import_current_account(config_path)
+    except Exception:
+        # Login succeeded but import failed — restore previous account
+        if active:
+            prev_creds = keychain.read_credentials(f"claude-switcher:{active.email}")
+            if prev_creds:
+                keychain.write_credentials(CLAUDE_SERVICE, active.keychain_account, prev_creds)
+        return None
 
 
 def remove_saved_account(email: str, config_path: Path = DEFAULT_CONFIG_PATH) -> None:

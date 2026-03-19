@@ -19,11 +19,19 @@ def read_credentials(service: str) -> str | None:
 
 
 def write_credentials(service: str, account: str, password: str) -> None:
-    """Write (or update) a Keychain entry. Raises RuntimeError on failure."""
+    """Write a Keychain entry, replacing all existing entries for that service."""
+    # Delete all existing entries for this service (there may be duplicates)
+    while True:
+        r = subprocess.run(
+            ["security", "delete-generic-password", "-s", service],
+            capture_output=True, text=True,
+        )
+        if r.returncode != 0:
+            break
+
     result = subprocess.run(
         [
             "security", "add-generic-password",
-            "-U",
             "-s", service,
             "-a", account,
             "-w", password,
@@ -54,5 +62,5 @@ def read_account_attribute(service: str) -> str | None:
     )
     if result.returncode != 0:
         return None
-    match = re.search(r'"acct"<blob>="([^"]*)"', result.stderr)
+    match = re.search(r'"acct"<blob>="([^"]*)"', result.stdout)
     return match.group(1) if match else None

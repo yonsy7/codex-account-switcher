@@ -112,7 +112,7 @@ class ClaudeSwitcherApp(rumps.App):
                 subtitle="Compte activé",
                 message=email,
             )
-        except RuntimeError as e:
+        except Exception as e:
             rumps.alert(title="Erreur", message=str(e))
 
         self._rebuild_menu()
@@ -140,7 +140,7 @@ class ClaudeSwitcherApp(rumps.App):
                     subtitle="Ajout annulé",
                     message="Le login a été annulé ou a échoué.",
                 )
-        except RuntimeError as e:
+        except Exception as e:
             rumps.alert(title="Erreur", message=str(e))
         self._rebuild_menu()
 
