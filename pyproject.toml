@@ -7,7 +7,7 @@ name = "claude-account-switcher"
 version = "0.1.0"
 description = "macOS menu bar app to switch between Claude Code accounts instantly"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.10"
 keywords = ["claude", "claude-code", "account-switcher", "macos", "menu-bar"]
 classifiers = [
