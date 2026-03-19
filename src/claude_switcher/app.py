@@ -1,5 +1,7 @@
 """macOS menu bar application using rumps."""
 
+import webbrowser
+
 import rumps
 from claude_switcher.config import load_accounts, get_active_account, DEFAULT_CONFIG_PATH
 from claude_switcher.core import (
@@ -61,6 +63,9 @@ class ClaudeSwitcherApp(rumps.App):
         # Add account
         self.menu.add(rumps.MenuItem("Ajouter un compte...", callback=self._on_add_account))
 
+        # View usage
+        self.menu.add(rumps.MenuItem("Voir usage...", callback=self._on_view_usage))
+
         # Remove account submenu
         if accounts:
             remove_menu = rumps.MenuItem("Supprimer un compte")
@@ -117,6 +122,10 @@ class ClaudeSwitcherApp(rumps.App):
         except RuntimeError as e:
             rumps.alert(title="Erreur", message=str(e))
         self._rebuild_menu()
+
+    def _on_view_usage(self, _):
+        """Open Claude usage page in browser."""
+        webbrowser.open("https://claude.ai/settings/usage")
 
     def _on_remove_account(self, sender):
         """Remove a saved account."""
