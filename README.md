@@ -41,6 +41,13 @@ pip install git+https://github.com/yonsy7/codex-account-switcher.git
 codex-switcher
 ```
 
+## Install with Homebrew
+
+```bash
+brew tap yonsy7/tap https://github.com/yonsy7/homebrew-tap
+brew install codex-account-switcher
+```
+
 ## Build from source
 
 ```bash
