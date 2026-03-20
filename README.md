@@ -1,5 +1,13 @@
 # Codex Account Switcher
 
+## Acknowledgements
+
+Big thanks to the original Claude Code Account Switcher project for the inspiration and initial architecture:
+- https://github.com/dabochen/claude-code-account-switcher
+
+This Codex version is an adapted port focused on OpenAI Codex account workflows.
+
+
 A lightweight macOS menu bar app to switch between multiple Codex (ChatGPT) accounts instantly — and see usage for each account.
 
 ## What it does
