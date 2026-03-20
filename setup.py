@@ -12,29 +12,29 @@ from setuptools import setup
 
 # py2app conflicts with pyproject.toml's install_requires,
 # so we keep this file minimal and self-contained.
-APP = ["src/claude_switcher/app.py"]
+APP = ["src/codex_switcher/app.py"]
 
 OPTIONS = {
     "argv_emulation": False,
     # LSUIElement=True = menu bar app only (no Dock icon, no Cmd+Tab entry)
     "plist": {
-        "CFBundleName": "Claude Switcher",
-        "CFBundleDisplayName": "Claude Switcher",
-        "CFBundleIdentifier": "com.emilejouannet.claude-switcher",
-        "CFBundleVersion": "0.2.0",
-        "CFBundleShortVersionString": "0.2.0",
+        "CFBundleName": "Codex Switcher",
+        "CFBundleDisplayName": "Codex Switcher",
+        "CFBundleIdentifier": "com.yonsy7.codex-switcher",
+        "CFBundleVersion": "0.1.0",
+        "CFBundleShortVersionString": "0.1.0",
         "LSUIElement": True,
         "LSMinimumSystemVersion": "12.0",
     },
     # Include our package + rumps and its dependencies
-    "packages": ["claude_switcher", "rumps"],
+    "packages": ["codex_switcher", "rumps"],
     "includes": ["objc", "Foundation", "AppKit"],
-    "resources": ["src/claude_switcher/resources"],
+    "resources": ["src/codex_switcher/resources"],
 }
 
 setup(
     app=APP,
-    name="Claude Switcher",
+    name="Codex Switcher",
     options={"py2app": OPTIONS},
     install_requires=[],
     setup_requires=["py2app"],

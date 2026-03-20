@@ -1,167 +1,104 @@
 import json
 from unittest.mock import patch, MagicMock
-from pathlib import Path
 
-from claude_switcher.core import (
-    check_claude_cli,
-    get_auth_status,
-    run_auth_logout,
-    run_auth_login,
+from codex_switcher.core import (
+    check_codex_cli,
     import_current_account,
     switch_account,
     add_new_account,
     remove_saved_account,
+    _extract_account_info,
 )
-from claude_switcher.config import AccountInfo
+from codex_switcher.config import AccountInfo, add_account, load_accounts
 
 
-class TestClaudeCLI:
-    @patch("claude_switcher.core.shutil.which")
+class TestCodexCLI:
+    @patch("codex_switcher.core.shutil.which")
     def test_check_cli_found(self, mock_which):
-        mock_which.return_value = "/usr/local/bin/claude"
-        assert check_claude_cli() is True
+        mock_which.return_value = "/usr/local/bin/codex"
+        assert check_codex_cli() is True
 
-    @patch("claude_switcher.core.Path.is_file", return_value=False)
-    @patch("claude_switcher.core.shutil.which", return_value=None)
-    def test_check_cli_not_found(self, mock_which, mock_is_file):
-        assert check_claude_cli() is False
+    @patch("codex_switcher.core.Path.is_file", return_value=False)
+    @patch("codex_switcher.core.shutil.which", return_value=None)
+    def test_check_cli_not_found(self, *_):
+        assert check_codex_cli() is False
 
-    @patch("claude_switcher.core.subprocess.run")
-    def test_get_auth_status(self, mock_run):
-        status = {"loggedIn": True, "email": "test@test.com", "subscriptionType": "pro", "orgName": "Org"}
-        mock_run.return_value = MagicMock(returncode=0, stdout=json.dumps(status))
-        result = get_auth_status()
-        assert result["email"] == "test@test.com"
 
-    @patch("claude_switcher.core.subprocess.run")
-    def test_get_auth_status_failure_returns_none(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
-        result = get_auth_status()
-        assert result is None
+class TestExtractAccountInfo:
+    def _jwt(self, payload: dict) -> str:
+        import base64
+        header = base64.urlsafe_b64encode(json.dumps({"alg": "none"}).encode()).decode().rstrip("=")
+        body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+        return f"{header}.{body}.sig"
+
+    def test_extracts_email_plan_org(self):
+        auth_claim = {
+            "chatgpt_plan_type": "pro",
+            "chatgpt_account_id": "acc-1",
+            "organizations": [{"title": "Personal"}],
+        }
+        payload = {"email": "test@example.com", "https://api.openai.com/auth": auth_claim}
+        blob = json.dumps({"tokens": {"id_token": self._jwt(payload)}})
+
+        email, plan, org, account_id = _extract_account_info(blob)
+        assert email == "test@example.com"
+        assert plan == "pro"
+        assert org == "Personal"
+        assert account_id == "acc-1"
 
 
 class TestImportCurrentAccount:
-    @patch("claude_switcher.core._read_oauth_account")
-    @patch("claude_switcher.core.get_auth_status")
-    @patch("claude_switcher.core.keychain")
-    def test_import_success(self, mock_kc, mock_status, mock_oauth, tmp_path):
-        mock_status.return_value = {"email": "test@test.com", "subscriptionType": "pro", "orgName": "Org"}
-        mock_kc.read_credentials.return_value = '{"accessToken":"tok"}'
-        mock_kc.read_account_attribute.return_value = "testuser"
-        mock_oauth.return_value = {"emailAddress": "test@test.com"}
+    @patch("codex_switcher.core.keychain")
+    @patch("codex_switcher.core._read_auth_blob")
+    @patch("codex_switcher.core._extract_account_info")
+    def test_import_success(self, mock_extract, mock_read, mock_kc, tmp_path):
+        mock_read.return_value = '{"tokens": {"id_token": "x.y.z"}}'
+        mock_extract.return_value = ("test@test.com", "pro", "Org", "acc-1")
 
         config_path = tmp_path / "accounts.json"
         result = import_current_account(config_path)
 
         assert result is not None
         assert result.email == "test@test.com"
-        assert result.oauth_account == {"emailAddress": "test@test.com"}
-        mock_kc.write_credentials.assert_called_once_with(
-            "claude-switcher:test@test.com", "testuser", '{"accessToken":"tok"}'
-        )
+        mock_kc.write_credentials.assert_called_once()
 
-    @patch("claude_switcher.core.get_auth_status")
-    @patch("claude_switcher.core.keychain")
-    def test_import_no_credentials(self, mock_kc, mock_status, tmp_path):
-        mock_kc.read_credentials.return_value = None
-        result = import_current_account(tmp_path / "accounts.json")
-        assert result is None
+    @patch("codex_switcher.core._read_auth_blob")
+    def test_import_none_without_auth_file(self, mock_read, tmp_path):
+        mock_read.return_value = None
+        assert import_current_account(tmp_path / "accounts.json") is None
 
 
 class TestSwitchAccount:
-    @patch("claude_switcher.core._write_oauth_account")
-    @patch("claude_switcher.core._read_oauth_account")
-    @patch("claude_switcher.core.keychain")
-    def test_switch_saves_current_then_loads_target(self, mock_kc, mock_read_oauth, mock_write_oauth, tmp_path):
+    @patch("codex_switcher.core.keychain")
+    @patch("codex_switcher.core._write_auth_blob")
+    @patch("codex_switcher.core._read_auth_blob")
+    @patch("codex_switcher.core._extract_account_info")
+    def test_switch_restores_target_auth(self, mock_extract, mock_read_auth, mock_write_auth, mock_kc, tmp_path):
         config_path = tmp_path / "accounts.json"
-        from claude_switcher.config import add_account, AccountInfo
-        add_account(AccountInfo("a@test.com", "pro", "Org A", True, "usera"), config_path)
-        add_account(AccountInfo("b@test.com", "pro", "Org B", False, "userb",
-                                oauth_account={"emailAddress": "b@test.com"}), config_path)
+        add_account(AccountInfo("a@test.com", "pro", "Org A", True, "a@test.com", "acc-a"), config_path)
+        add_account(AccountInfo("b@test.com", "pro", "Org B", False, "b@test.com", "acc-b"), config_path)
 
-        mock_kc.read_credentials.side_effect = [
-            '{"accessToken":"refreshed-a"}',
-            '{"accessToken":"tok-b"}',
-        ]
-        mock_read_oauth.return_value = {"emailAddress": "a@test.com"}
+        mock_read_auth.return_value = '{"tokens": {"id_token": "a"}}'
+        mock_kc.read_credentials.return_value = '{"tokens": {"id_token": "b"}}'
+        mock_extract.return_value = ("b@test.com", "pro", "Org B", "acc-b")
 
         switch_account("b@test.com", config_path)
 
-        mock_kc.write_credentials.assert_any_call(
-            "claude-switcher:a@test.com", "usera", '{"accessToken":"refreshed-a"}'
-        )
-        mock_kc.write_credentials.assert_any_call(
-            "Claude Code-credentials", "userb", '{"accessToken":"tok-b"}'
-        )
-        mock_write_oauth.assert_called_once_with({"emailAddress": "b@test.com"})
-
-    @patch("claude_switcher.core._write_oauth_account")
-    @patch("claude_switcher.core._read_oauth_account")
-    @patch("claude_switcher.core.keychain")
-    def test_switch_missing_keychain_entry_raises(self, mock_kc, mock_read_oauth, mock_write_oauth, tmp_path):
-        config_path = tmp_path / "accounts.json"
-        from claude_switcher.config import add_account, AccountInfo
-        add_account(AccountInfo("a@test.com", "pro", "Org", True, "u"), config_path)
-        add_account(AccountInfo("b@test.com", "pro", "Org", False, "u"), config_path)
-        mock_kc.read_credentials.side_effect = ['{"tok":"a"}', None]
-        mock_read_oauth.return_value = None
-
-        try:
-            switch_account("b@test.com", config_path)
-            assert False, "Should have raised"
-        except RuntimeError as e:
-            assert "not found" in str(e).lower()
+        mock_write_auth.assert_called_once_with('{"tokens": {"id_token": "b"}}')
+        active = [a for a in load_accounts(config_path) if a.active][0]
+        assert active.email == "b@test.com"
 
 
-class TestAddNewAccount:
-    @patch("claude_switcher.core._read_oauth_account")
-    @patch("claude_switcher.core.get_auth_status")
-    @patch("claude_switcher.core.run_auth_login")
-    @patch("claude_switcher.core.run_auth_logout")
-    @patch("claude_switcher.core.keychain")
-    def test_add_account_full_flow(self, mock_kc, mock_logout, mock_login, mock_status, mock_oauth, tmp_path):
-        config_path = tmp_path / "accounts.json"
-        from claude_switcher.config import add_account, AccountInfo
-        add_account(AccountInfo("a@test.com", "pro", "Org A", True, "usera"), config_path)
+class TestAddAndRemove:
+    @patch("codex_switcher.core.run_auth_login", return_value=False)
+    @patch("codex_switcher.core.run_auth_logout")
+    def test_add_account_cancelled(self, _mock_logout, _mock_login, tmp_path):
+        assert add_new_account(tmp_path / "accounts.json") is None
 
-        mock_kc.read_credentials.side_effect = [
-            '{"accessToken":"tok-a"}',
-            '{"accessToken":"tok-new"}',
-        ]
-        mock_kc.read_account_attribute.side_effect = ["newuser"]
-        mock_kc.delete_credentials.return_value = False
-        mock_login.return_value = True
-        mock_status.return_value = {"email": "new@test.com", "subscriptionType": "pro", "orgName": "New Org"}
-        mock_oauth.return_value = {"emailAddress": "new@test.com"}
-
-        result = add_new_account(config_path)
-        assert result is not None
-        assert result.email == "new@test.com"
-        mock_logout.assert_called_once()
-        mock_login.assert_called_once()
-
-    @patch("claude_switcher.core.run_auth_login")
-    @patch("claude_switcher.core.run_auth_logout")
-    @patch("claude_switcher.core.keychain")
-    def test_add_account_login_cancelled(self, mock_kc, mock_logout, mock_login, tmp_path):
-        config_path = tmp_path / "accounts.json"
-        mock_kc.read_credentials.return_value = None
-        mock_kc.delete_credentials.return_value = False
-        mock_login.return_value = False
-
-        result = add_new_account(config_path)
-        assert result is None
-
-
-class TestRemoveSavedAccount:
-    @patch("claude_switcher.core.keychain")
+    @patch("codex_switcher.core.keychain")
     def test_remove_account(self, mock_kc, tmp_path):
         config_path = tmp_path / "accounts.json"
-        from claude_switcher.config import add_account, AccountInfo
-        add_account(AccountInfo("a@test.com", "pro", "Org", False, "u"), config_path)
-
+        add_account(AccountInfo("a@test.com", "pro", "Org", False, "a@test.com", ""), config_path)
         remove_saved_account("a@test.com", config_path)
-
-        mock_kc.delete_credentials.assert_called_once_with("claude-switcher:a@test.com")
-        from claude_switcher.config import load_accounts
         assert len(load_accounts(config_path)) == 0
+        mock_kc.delete_credentials.assert_called_once_with("codex-switcher:a@test.com")

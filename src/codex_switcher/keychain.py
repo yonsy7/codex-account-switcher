@@ -3,11 +3,8 @@
 import re
 import subprocess
 
-CLAUDE_SERVICE = "Claude Code-credentials"
-
 
 def read_credentials(service: str) -> str | None:
-    """Read the password blob for a Keychain entry. Returns None if not found."""
     result = subprocess.run(
         ["security", "find-generic-password", "-s", service, "-w"],
         capture_output=True,
@@ -19,22 +16,25 @@ def read_credentials(service: str) -> str | None:
 
 
 def write_credentials(service: str, account: str, password: str) -> None:
-    """Write a Keychain entry, replacing all existing entries for that service."""
-    # Delete all existing entries for this service (there may be duplicates)
     while True:
         r = subprocess.run(
             ["security", "delete-generic-password", "-s", service],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if r.returncode != 0:
             break
 
     result = subprocess.run(
         [
-            "security", "add-generic-password",
-            "-s", service,
-            "-a", account,
-            "-w", password,
+            "security",
+            "add-generic-password",
+            "-s",
+            service,
+            "-a",
+            account,
+            "-w",
+            password,
         ],
         capture_output=True,
         text=True,
@@ -44,7 +44,6 @@ def write_credentials(service: str, account: str, password: str) -> None:
 
 
 def delete_credentials(service: str) -> bool:
-    """Delete a Keychain entry. Returns True if deleted, False if not found."""
     result = subprocess.run(
         ["security", "delete-generic-password", "-s", service],
         capture_output=True,
@@ -54,7 +53,6 @@ def delete_credentials(service: str) -> bool:
 
 
 def read_account_attribute(service: str) -> str | None:
-    """Read the account (-a) attribute of a Keychain entry by parsing security output."""
     result = subprocess.run(
         ["security", "find-generic-password", "-s", service],
         capture_output=True,

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from claude_switcher.config import (
+from codex_switcher.config import (
     AccountInfo,
     load_accounts,
     save_accounts,
